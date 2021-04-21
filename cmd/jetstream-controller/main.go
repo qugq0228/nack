@@ -48,8 +48,8 @@ func run() error {
 	klog.InitFlags(nil)
 	kubeConfig := flag.String("kubeconfig", "", "Path to kubeconfig")
 	version := flag.Bool("version", false, "Print the version and exit")
-	creds := flag.String("creds", "", "NATS Credentials")
-	nkey := flag.String("nkey", "", "NATS NKey")
+	creds := flag.String("creds", "", "NATS Credentials, receives credentials file or credentials content. \nThe credentials content supports plaintext and base64 encryption, for example: \n-nkey='creds: xxx', -nkey='base64: xxx'")
+	nkey := flag.String("nkey", "", "NATS NKey, receives nkey file or nkey content. \nThe nkey content supports plaintext and base64 encryption, for example: \n-nkey='nkey: xxx', -nkey='base64: xxx'")
 	server := flag.String("s", "", "NATS Server URL") // required
 	flag.Parse()
 

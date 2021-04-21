@@ -86,14 +86,9 @@ func (c *Controller) processStream(ns, name string, jsmc jsmClient) (err error) 
 			opts := make([]nats.Option, 0)
 			opts = append(opts, nats.Name(fmt.Sprintf("%s-str-%s-%d", c.opts.NATSClientName, spec.Name, str.Generation)))
 			// Use JWT/NKEYS based credentials if present.
-			if spec.Creds != "" {
-				opts = append(opts, nats.UserCredentials(spec.Creds))
-			} else if spec.Nkey != "" {
-				opt, err := nats.NkeyOptionFromSeed(spec.Nkey)
-				if err != nil {
-					return err
-				}
-				opts = append(opts, opt)
+			opts, err := AddAuthToOptions(spec.ServerSpec, opts)
+			if err != nil {
+				return fmt.Errorf("failed to add stream auth info: %w", err)
 			}
 			opts = append(opts, nats.MaxReconnects(-1))
 

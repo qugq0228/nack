@@ -22,23 +22,22 @@ func (c *Consumer) GetSpec() interface{} {
 
 // ConsumerSpec is the spec for a Consumer resource
 type ConsumerSpec struct {
-	Servers        []string `json:"servers"`
-	Creds          string   `json:"creds"`
-	Nkey           string   `json:"nkey"`
-	StreamName     string   `json:"streamName"`
-	DeliverPolicy  string   `json:"deliverPolicy"`
-	OptStartSeq    int      `json:"optStartSeq"`
-	OptStartTime   string   `json:"optStartTime"`
-	DurableName    string   `json:"durableName"`
-	DeliverSubject string   `json:"deliverSubject"`
-	AckPolicy      string   `json:"ackPolicy"`
-	AckWait        string   `json:"ackWait"`
-	MaxDeliver     int      `json:"maxDeliver"`
-	FilterSubject  string   `json:"filterSubject"`
-	ReplayPolicy   string   `json:"replayPolicy"`
-	SampleFreq     string   `json:"sampleFreq"`
-	RateLimitBps   int      `json:"rateLimitBps"`
-	MaxAckPending  int      `json:"maxAckPending"`
+	ServerSpec `json:",inline"`
+
+	StreamName     string `json:"streamName"`
+	DeliverPolicy  string `json:"deliverPolicy"`
+	OptStartSeq    int    `json:"optStartSeq"`
+	OptStartTime   string `json:"optStartTime"`
+	DurableName    string `json:"durableName"`
+	DeliverSubject string `json:"deliverSubject"`
+	AckPolicy      string `json:"ackPolicy"`
+	AckWait        string `json:"ackWait"`
+	MaxDeliver     int    `json:"maxDeliver"`
+	FilterSubject  string `json:"filterSubject"`
+	ReplayPolicy   string `json:"replayPolicy"`
+	SampleFreq     string `json:"sampleFreq"`
+	RateLimitBps   int    `json:"rateLimitBps"`
+	MaxAckPending  int    `json:"maxAckPending"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -171,16 +171,10 @@ func (c *Controller) Run() error {
 	opts = append(opts, nats.Name(c.opts.NATSClientName))
 
 	// Use JWT/NKEYS based credentials if present.
-	if c.opts.NATSCredentials != "" {
-		opts = append(opts, nats.UserCredentials(c.opts.NATSCredentials))
-	} else if c.opts.NATSNKey != "" {
-		opt, err := nats.NkeyOptionFromSeed(c.opts.NATSNKey)
-		if err != nil {
-			return nil
-		}
-		opts = append(opts, opt)
+	opts, err := AddAuthToOptions(c.opts, opts)
+	if err != nil {
+		return err
 	}
-
 	// Always attempt to have a connection to NATS.
 	opts = append(opts, nats.MaxReconnects(-1))
 

@@ -20,11 +20,17 @@ func (s *Stream) GetSpec() interface{} {
 	return s.Spec
 }
 
+// ServerSpec is the server info
+type ServerSpec struct {
+	Servers []string `json:"servers"`
+	Creds   string   `json:"creds"`
+	Nkey    string   `json:"nkey"`
+}
+
 // StreamSpec is the spec for a Stream resource
 type StreamSpec struct {
-	Servers         []string `json:"servers"`
-	Creds           string   `json:"creds"`
-	Nkey            string   `json:"nkey"`
+	ServerSpec `json:",inline"`
+
 	Name            string   `json:"name"`
 	Subjects        []string `json:"subjects"`
 	Retention       string   `json:"retention"`
