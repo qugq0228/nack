@@ -56,6 +56,7 @@ func (c *Controller) processConsumer(ns, name string, jsmc jsmClient) (err error
 		}
 	}()
 
+	deleteOK := cns.GetDeletionTimestamp() != nil
 	type operator func(ctx context.Context, c jsmClient, spec apis.ConsumerSpec) (err error)
 
 	natsClientUtil := func(op operator) error {
@@ -73,21 +74,25 @@ func (c *Controller) processConsumer(ns, name string, jsmc jsmClient) (err error
 
 			natsServers := strings.Join(servers, ",")
 			newNc, err := nats.Connect(natsServers, opts...)
-			if err != nil {
-				return fmt.Errorf("failed to connect to leaf nats(%s): %w", natsServers, err)
+			newJsmc := new(realJsmClient)
+			if err != nil && deleteOK {
+				c.warningEvent(cns, "deleting", "edge is disconnect or account is delete,ignore.")
+			} else if err != nil {
+				return fmt.Errorf("failed to connect to nats-servers(%s): %w", natsServers, err)
+			} else {
+				defer newNc.Close()
+				c.normalEvent(cns, "Connecting", "Connecting to new nats-servers")
+				newJm, err := jsm.New(newNc)
+				if err != nil {
+					return err
+				}
+				newJsmc = &realJsmClient{nc: newNc, jm: newJm}
+				defer newJsmc.Close()
 			}
-
-			c.normalEvent(cns, "Connecting", "Connecting to new nats-servers")
-			newJm, err := jsm.New(newNc)
-			if err != nil {
-				return err
-			}
-			newJsmc := &realJsmClient{nc: newNc, jm: newJm}
 
 			if err := op(c.ctx, newJsmc, spec); err != nil {
 				return err
 			}
-			newJsmc.Close()
 		} else {
 			if err := op(c.ctx, jsmc, spec); err != nil {
 				return err
@@ -96,7 +101,6 @@ func (c *Controller) processConsumer(ns, name string, jsmc jsmClient) (err error
 		return nil
 	}
 
-	deleteOK := cns.GetDeletionTimestamp() != nil
 	newGeneration := cns.Generation != cns.Status.ObservedGeneration
 	consumerOK := true
 	err = natsClientUtil(consumerExists)
@@ -153,6 +157,11 @@ func consumerExists(ctx context.Context, c jsmClient, spec apis.ConsumerSpec) (e
 			err = fmt.Errorf("failed to check if consumer exists: %w", err)
 		}
 	}()
+
+	//edge is disconnect or account is delete
+	if c.(*realJsmClient).nc == nil {
+		return nil
+	}
 
 	_, err = c.LoadConsumer(ctx, spec.StreamName, spec.DurableName)
 	return err
@@ -231,6 +240,12 @@ func createConsumer(ctx context.Context, c jsmClient, spec apis.ConsumerSpec) (e
 }
 
 func deleteConsumer(ctx context.Context, c jsmClient, spec apis.ConsumerSpec) (err error) {
+
+	//edge is disconnect or account is delete
+	if c.(*realJsmClient).nc == nil {
+		return nil
+	}
+
 	stream, consumer := spec.StreamName, spec.DurableName
 	defer func() {
 		if err != nil {

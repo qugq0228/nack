@@ -55,6 +55,7 @@ func (c *Controller) processStreamTemplate(ns, name string, jsmc jsmClient) (err
 			err = fmt.Errorf("%s: %w", err, serr)
 		}
 	}()
+	deleteOK := strTmpl.GetDeletionTimestamp() != nil
 
 	type operator func(ctx context.Context, c jsmClient, spec apis.StreamTemplateSpec) (err error)
 
@@ -73,21 +74,25 @@ func (c *Controller) processStreamTemplate(ns, name string, jsmc jsmClient) (err
 
 			natsServers := strings.Join(servers, ",")
 			newNc, err := nats.Connect(natsServers, opts...)
-			if err != nil {
+			newJsmc := new(realJsmClient)
+			if err != nil && deleteOK {
+				c.warningEvent(strTmpl, "deleting", "edge is disconnect or account is delete,ignore.")
+			} else if err != nil {
 				return fmt.Errorf("failed to connect to nats-servers(%s): %w", natsServers, err)
+			} else {
+				defer newNc.Close()
+				c.normalEvent(strTmpl, "Connecting", "Connecting to new nats-servers")
+				newJm, err := jsm.New(newNc)
+				if err != nil {
+					return err
+				}
+				newJsmc = &realJsmClient{nc: newNc, jm: newJm}
+				defer newJsmc.Close()
 			}
-
-			c.normalEvent(strTmpl, "Connecting", "Connecting to new nats-servers")
-			newJm, err := jsm.New(newNc)
-			if err != nil {
-				return err
-			}
-			newJsmc := &realJsmClient{nc: newNc, jm: newJm}
 
 			if err := op(c.ctx, newJsmc, spec); err != nil {
 				return err
 			}
-			newJsmc.Close()
 		} else {
 			if err := op(c.ctx, jsmc, spec); err != nil {
 				return err
@@ -96,7 +101,6 @@ func (c *Controller) processStreamTemplate(ns, name string, jsmc jsmClient) (err
 		return nil
 	}
 
-	deleteOK := strTmpl.GetDeletionTimestamp() != nil
 	newGeneration := strTmpl.Generation != strTmpl.Status.ObservedGeneration
 	strTmplOK := true
 	err = natsClientUtil(streamTemplateExists)
@@ -150,6 +154,11 @@ func streamTemplateExists(ctx context.Context, c jsmClient, spec apis.StreamTemp
 			err = fmt.Errorf("failed to check if stream exists: %w", err)
 		}
 	}()
+
+	if c.(*realJsmClient).nc == nil {
+		return nil
+	}
+
 	_, err = c.LoadStreamTemplate(ctx, spec.Name)
 	return err
 }
@@ -198,6 +207,11 @@ func createStreamTemplate(ctx context.Context, c jsmClient, spec apis.StreamTemp
 }
 
 func deleteStreamTemplate(ctx context.Context, c jsmClient, spec apis.StreamTemplateSpec) (err error) {
+
+	if c.(*realJsmClient).nc == nil {
+		return nil
+	}
+
 	name := spec.Name
 	defer func() {
 		if err != nil {

@@ -67,6 +67,7 @@ func (c *Controller) processStream(ns, name string, jsmc jsmClient) (err error) 
 			err = fmt.Errorf("%s: %w", err, serr)
 		}
 	}()
+	deleteOK := str.GetDeletionTimestamp() != nil
 
 	type operator func(ctx context.Context, c jsmClient, spec apis.StreamSpec) (err error)
 
@@ -85,21 +86,26 @@ func (c *Controller) processStream(ns, name string, jsmc jsmClient) (err error) 
 
 			natsServers := strings.Join(servers, ",")
 			newNc, err := nats.Connect(natsServers, opts...)
-			if err != nil {
+			newJsmc := new(realJsmClient)
+			if err != nil && deleteOK {
+				c.warningEvent(str, "deleting", "edge is disconnect or account is delete,ignore.")
+			} else if err != nil {
 				return fmt.Errorf("failed to connect to nats-servers(%s): %w", natsServers, err)
+			} else {
+				defer newNc.Close()
+				c.normalEvent(str, "Connecting", "Connecting to new nats-servers")
+				newJm, err := jsm.New(newNc)
+				if err != nil {
+					return err
+				}
+				newJsmc = &realJsmClient{nc: newNc, jm: newJm}
+				defer newJsmc.Close()
 			}
-
-			c.normalEvent(str, "Connecting", "Connecting to new nats-servers")
-			newJm, err := jsm.New(newNc)
-			if err != nil {
-				return err
-			}
-			newJsmc := &realJsmClient{nc: newNc, jm: newJm}
 
 			if err := op(c.ctx, newJsmc, spec); err != nil {
 				return err
 			}
-			newJsmc.Close()
+
 		} else {
 			if err := op(c.ctx, jsmc, spec); err != nil {
 				return err
@@ -108,7 +114,6 @@ func (c *Controller) processStream(ns, name string, jsmc jsmClient) (err error) 
 		return nil
 	}
 
-	deleteOK := str.GetDeletionTimestamp() != nil
 	newGeneration := str.Generation != str.Status.ObservedGeneration
 	strOK := true
 	err = natsClientUtil(streamExists)
@@ -177,6 +182,9 @@ func streamExists(ctx context.Context, c jsmClient, spec apis.StreamSpec) (err e
 			err = fmt.Errorf("failed to check if stream exists: %w", err)
 		}
 	}()
+	if c.(*realJsmClient).nc == nil {
+		return nil
+	}
 
 	_, err = c.LoadStream(ctx, spec.Name)
 	return err
@@ -284,6 +292,12 @@ func updateStream(ctx context.Context, c jsmClient, spec apis.StreamSpec) (err e
 }
 
 func deleteStream(ctx context.Context, c jsmClient, spec apis.StreamSpec) (err error) {
+
+	//edge is disconnect or account is delete
+	if c.(*realJsmClient).nc == nil {
+		return nil
+	}
+
 	name := spec.Name
 	defer func() {
 		if err != nil {
